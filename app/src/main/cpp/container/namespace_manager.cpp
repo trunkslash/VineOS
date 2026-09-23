@@ -68,6 +68,21 @@ bool Container::start() {
     if (rootless_directory_) {
         VINE_LOGI("Using rootless directory rootfs: %s", config_.rootfs_mount_path.c_str());
     } else {
+        // A downloaded .vrom is not a mountable rootfs.img. It is a ZIP of
+        // system/vendor/ramdisk partition images. Do not fall through to the
+        // loop-device path on unprivileged Android and report a misleading
+        // /dev/loop-control failure.
+        const std::string rom_source_marker = config_.instance_path + "/rom_source";
+        if (path_exists(rom_source_marker) && !path_exists(config_.rootfs_image_path)) {
+            auto rom_source = read_file(rom_source_marker);
+            VINE_LOGE(
+                "Rootless rootfs is not prepared for %s. VROM source=%s. "
+                "Userspace extraction of ramdisk/system/vendor is required before boot.",
+                config_.instance_id.c_str(),
+                rom_source ? rom_source->c_str() : "(unknown)");
+            status_ = ContainerStatus::ERROR;
+            return false;
+        }
         if (!mount_rootfs()) { status_ = ContainerStatus::ERROR; return false; }
         if (!setup_bind_mounts()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
         if (!setup_dev_nodes()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
