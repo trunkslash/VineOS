@@ -32,7 +32,9 @@ android {
 
         ndk {
             // Matches the host ABIs AbiCompat knows how to run natively or via QEMU; armeabi is excluded since no 32-bit-only ARM devices ship with Android 8+ (minSdk 26) in practice
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            // Rootless libext2fs bring-up is currently built/tested on the Fold 6 first.
+            // Restore the other ABIs after their e2fsprogs archives are produced.
+            abiFilters += listOf("arm64-v8a")
         }
 
         externalNativeBuild {
