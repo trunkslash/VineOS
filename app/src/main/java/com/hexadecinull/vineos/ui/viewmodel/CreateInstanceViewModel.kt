@@ -136,7 +136,26 @@ class CreateInstanceViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                VineRuntime.probeExt4Rootfs(preparedImage.absolutePath)
+                if (!VineRuntime.probeExt4Rootfs(preparedImage.absolutePath)) {
+                    stateFlow.value = CreateInstanceState.Error(
+                        "Extracted system.img is not a usable Android root filesystem.",
+                    )
+                    return@launch
+                }
+
+                val rootfsDir = File(instancePath, "rootfs_mnt")
+                val extracted = withContext(Dispatchers.IO) {
+                    VineRuntime.extractExt4Rootfs(
+                        preparedImage.absolutePath,
+                        rootfsDir.absolutePath,
+                    )
+                }
+                if (!extracted) {
+                    stateFlow.value = CreateInstanceState.Error(
+                        "Failed to extract Android root filesystem. Check VineRuntime logs.",
+                    )
+                    return@launch
+                }
             }
 
             val instance = VMInstance(
