@@ -11,6 +11,7 @@ import com.hexadecinull.vineos.data.repository.ROMRepository
 import com.hexadecinull.vineos.native.VineRuntime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -84,8 +85,9 @@ class CreateInstanceViewModel @Inject constructor(
             val cpuCores = selectedCpuCores.value
             val isRooted = allowRootInstances.value && selectedRoot.value
 
+            val requestedInstanceId = UUID.randomUUID().toString()
             val instancePath = VineRuntime.createInstance(
-                instanceId = "",
+                instanceId = requestedInstanceId,
                 romImagePath = selectedRom.localPath ?: "",
                 storageMb = storage,
             )
