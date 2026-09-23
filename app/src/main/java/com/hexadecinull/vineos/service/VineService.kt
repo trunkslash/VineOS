@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.hexadecinull.vineos.MainActivity
 import com.hexadecinull.vineos.VineApplication.Companion.CHANNEL_VM_RUNNING
@@ -16,6 +17,7 @@ class VineService : Service() {
         super.onCreate()
         // Android requires a service started with startForegroundService() to promote
         // itself promptly. Do this before VM startup can occupy worker/native threads.
+        Log.i(TAG, "onCreate: promoting VineService to foreground")
         startForeground(NOTIF_ID, buildNotification(runningCount = 0))
     }
 
@@ -61,5 +63,6 @@ class VineService : Service() {
         const val ACTION_START = "com.hexadecinull.vineos.START_SERVICE"
         const val ACTION_STOP = "com.hexadecinull.vineos.STOP_SERVICE"
         private const val NOTIF_ID = 1001
+        private const val TAG = "VineService"
     }
 }
