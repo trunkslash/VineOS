@@ -12,11 +12,15 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class VineService : Service() {
+    override fun onCreate() {
+        super.onCreate()
+        // Android requires a service started with startForegroundService() to promote
+        // itself promptly. Do this before VM startup can occupy worker/native threads.
+        startForeground(NOTIF_ID, buildNotification(runningCount = 0))
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = when (intent?.action ?: ACTION_START) {
-        ACTION_START -> {
-            startForeground(NOTIF_ID, buildNotification(runningCount = 0))
-            START_STICKY
-        }
+        ACTION_START -> START_STICKY
         ACTION_STOP -> {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
