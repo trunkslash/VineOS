@@ -102,6 +102,19 @@ Java_com_hexadecinull_vineos_native_VineRuntime_probeExt4Rootfs(
     return vine::rootfs::probe_ext4_rootfs(image_path) ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_hexadecinull_vineos_native_VineRuntime_extractExt4Rootfs(
+        JNIEnv* env, jobject, jstring j_image_path, jstring j_output_dir) {
+    const std::string image_path = j2s(env, j_image_path);
+    const std::string output_dir = j2s(env, j_output_dir);
+    if (image_path.empty() || output_dir.empty()) {
+        VINE_LOGE("ext4 extract: empty image/output path");
+        return JNI_FALSE;
+    }
+    return vine::rootfs::extract_ext4_rootfs(image_path, output_dir)
+        ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_hexadecinull_vineos_native_VineRuntime_startInstance(
         JNIEnv* env, jobject,
