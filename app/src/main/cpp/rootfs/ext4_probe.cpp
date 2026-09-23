@@ -81,7 +81,7 @@ bool write_regular_file(ext2_filsys fs, ext2_ino_t ino,
 }
 
 bool read_symlink(ext2_filsys fs, ext2_ino_t ino,
-                  const struct ext2_inode& inode, std::string* target) {
+                  struct ext2_inode inode, std::string* target) {
     if (ext2fs_is_fast_symlink(&inode)) {
         const size_t size = static_cast<size_t>(inode.i_size);
         target->assign(reinterpret_cast<const char*>(inode.i_block), size);
