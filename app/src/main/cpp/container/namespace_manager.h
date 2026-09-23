@@ -67,8 +67,10 @@ private:
     ContainerStatus status_ = ContainerStatus::STOPPED;
     pid_t init_pid_ = -1;
     int framebuffer_fd_ = -1;
+    bool rootless_directory_ = false;
 
     bool mount_rootfs();
+    bool setup_rootless_userns();
     bool setup_bind_mounts();
     bool setup_dev_nodes();
     bool setup_binfmt_misc();
