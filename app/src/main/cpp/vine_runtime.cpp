@@ -57,13 +57,30 @@ Java_com_hexadecinull_vineos_native_VineRuntime_shutdown(
 JNIEXPORT jstring JNICALL
 Java_com_hexadecinull_vineos_native_VineRuntime_createInstance(
         JNIEnv* env, jobject,
-        jstring j_instance_id, jstring, jint) {
+        jstring j_instance_id, jstring j_rom_image_path, jint) {
     const std::string id = j2s(env, j_instance_id);
     auto& mgr = vine::NamespaceManager::instance();
     const std::string path = mgr.data_dir() + "/instances/" + id;
-    if (!vine::mkdirs(path + "/rootfs") || !vine::mkdirs(path + "/data")) {
+    if (!vine::mkdirs(path + "/rootfs") || !vine::mkdirs(path + "/rootfs_mnt") || !vine::mkdirs(path + "/data")) {
         VINE_LOGE("Failed to create instance dirs at %s", path.c_str());
         return nullptr;
+    }
+
+    // Keep the selected .vrom associated with the instance. Older code expected
+    // rootfs.img here even though .vrom is a ZIP containing partition images;
+    // preserving the source path lets the rootless preparation layer handle the
+    // real format instead of silently looking for a nonexistent rootfs.img.
+    const std::string rom_path = j2s(env, j_rom_image_path);
+    if (!rom_path.empty()) {
+        const std::string marker = path + "/rom_source";
+        FILE* fp = fopen(marker.c_str(), "w");
+        if (fp) {
+            fwrite(rom_path.data(), 1, rom_path.size(), fp);
+            fclose(fp);
+            VINE_LOGI("Instance %s ROM source: %s", id.c_str(), rom_path.c_str());
+        } else {
+            VINE_LOGW("Could not persist ROM source for %s", id.c_str());
+        }
     }
     return s2j(env, path);
 }
@@ -89,6 +106,8 @@ Java_com_hexadecinull_vineos_native_VineRuntime_startInstance(
     vine::ContainerConfig cfg;
     cfg.instance_id = id;
     cfg.instance_path = path;
+    // Legacy rooted images may still provide rootfs.img. Rootless instances use
+    // rootfs_mnt after userspace preparation of the .vrom contents.
     cfg.rootfs_image_path = path + "/rootfs.img";
     cfg.rootfs_mount_path = path + "/rootfs_mnt";
     cfg.ram_mb = (int)ram_mb;
