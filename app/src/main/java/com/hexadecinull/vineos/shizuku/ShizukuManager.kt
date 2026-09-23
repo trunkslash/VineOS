@@ -18,7 +18,17 @@ import rikka.shizuku.Shizuku
 
 data class ShizukuStatus(val isInstalled: Boolean, val isRunning: Boolean, val isGranted: Boolean, val serverUid: Int)
 
-data class NamespaceProbeResult(val unshareOk: Boolean, val unshareErrno: Int, val mountOk: Boolean, val mountErrno: Int, val uid: Int)
+data class NamespaceProbeResult(
+    val unshareOk: Boolean,
+    val unshareErrno: Int,
+    val mountOk: Boolean,
+    val mountErrno: Int,
+    val usernsOk: Boolean,
+    val usernsErrno: Int,
+    val usernsMountOk: Boolean,
+    val usernsMountErrno: Int,
+    val uid: Int,
+)
 
 @Singleton
 class ShizukuManager @Inject constructor(@ApplicationContext private val context: Context) {
@@ -91,6 +101,10 @@ class ShizukuManager @Inject constructor(@ApplicationContext private val context
             unshareErrno = fields["unshare_errno"]?.toIntOrNull() ?: 0,
             mountOk = fields["mount_ok"] == "1",
             mountErrno = fields["mount_errno"]?.toIntOrNull() ?: 0,
+            usernsOk = fields["userns_ok"] == "1",
+            usernsErrno = fields["userns_errno"]?.toIntOrNull() ?: 0,
+            usernsMountOk = fields["userns_mount_ok"] == "1",
+            usernsMountErrno = fields["userns_mount_errno"]?.toIntOrNull() ?: 0,
             uid = fields["uid"]?.toIntOrNull() ?: -1,
         )
     }

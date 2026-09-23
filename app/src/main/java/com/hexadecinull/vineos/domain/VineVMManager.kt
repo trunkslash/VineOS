@@ -66,6 +66,11 @@ class VineVMManager @Inject constructor(@ApplicationContext private val context:
 
             if (handle == 0L) {
                 flow.value = VMStatus.ERROR
+                // Do not stop a service immediately after startForegroundService().
+                // Android may not have delivered onCreate()/startForeground() yet;
+                // stopping it in that window produces ForegroundServiceDidNotStartInTimeException.
+                // Give the main thread time to promote the service first.
+                delay(1000L)
                 stopServiceIfIdle()
                 return@launch
             }
