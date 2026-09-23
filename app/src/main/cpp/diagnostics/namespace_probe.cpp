@@ -122,10 +122,8 @@ NamespaceProbeResult probe_namespace_support() {
         }
         waitpid(privileged, nullptr, 0);
 
-        ProbeWireResult privileged_result{};
-        // The first child wrote directly to the shared pipe. Read it through a
-        // private pipe would add complexity, so run each probe in its own top
-        // level child instead; this process only performs the userns probe.
+        // The privileged child has completed and written its result first.
+        // Now test the user-namespace path in this disposable process.
         probe_userns(wire);
         write(pipefd[1], &wire, sizeof(wire));
         close(pipefd[1]);
