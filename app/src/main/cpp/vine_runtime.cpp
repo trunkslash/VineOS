@@ -7,6 +7,7 @@
 #include "utils/vine_log.h"
 #include "utils/vine_utils.h"
 #include "container/namespace_manager.h"
+#include "rootfs/ext4_probe.h"
 #include "qemu_bridge/qemu_launcher.h"
 #include "display/framebuffer_bridge.h"
 #include "input/uinput_bridge.h"
@@ -78,6 +79,11 @@ Java_com_hexadecinull_vineos_native_VineRuntime_createInstance(
             fwrite(rom_path.data(), 1, rom_path.size(), fp);
             fclose(fp);
             VINE_LOGI("Instance %s ROM source: %s", id.c_str(), rom_path.c_str());
+            // The current Nougat VROM path may point directly at an ext4 image in tests.
+            // ZIP-backed VROM extraction is the next layer; this probe deliberately does not mount.
+            if (rom_path.size() >= 4 && rom_path.substr(rom_path.size() - 4) == ".img") {
+                (void)vine::rootfs::probe_ext4_rootfs(rom_path);
+            }
         } else {
             VINE_LOGW("Could not persist ROM source for %s", id.c_str());
         }

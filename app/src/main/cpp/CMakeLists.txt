@@ -27,6 +27,7 @@ endif()
 set(VINE_SOURCES
     vine_runtime.cpp
     container/namespace_manager.cpp
+    rootfs/ext4_probe.cpp
     qemu_bridge/qemu_launcher.cpp
     display/framebuffer_bridge.cpp
     input/uinput_bridge.cpp
@@ -36,21 +37,44 @@ set(VINE_SOURCES
 
 add_library(vine_runtime SHARED ${VINE_SOURCES})
 
+# libext2fs is cross-compiled by scripts/build-e2fsprogs-android.sh.
+set(E2FS_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/e2fsprogs-android/${CMAKE_ANDROID_ARCH_ABI}")
+set(E2FS_LIBDIR "${E2FS_PREFIX}/lib")
+if(NOT EXISTS "${E2FS_LIBDIR}/libext2fs.a")
+    message(FATAL_ERROR
+        "Missing Android libext2fs for ${CMAKE_ANDROID_ARCH_ABI}. "
+        "Run scripts/build-e2fsprogs-android.sh ${CMAKE_ANDROID_ARCH_ABI} first.")
+endif()
+
+foreach(lib ext2fs com_err uuid blkid)
+    add_library(e2fs_${lib} STATIC IMPORTED)
+    set_target_properties(e2fs_${lib} PROPERTIES
+        IMPORTED_LOCATION "${E2FS_LIBDIR}/lib${lib}.a")
+endforeach()
+
 target_include_directories(vine_runtime PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/container
+    ${CMAKE_CURRENT_SOURCE_DIR}/rootfs
     ${CMAKE_CURRENT_SOURCE_DIR}/qemu_bridge
     ${CMAKE_CURRENT_SOURCE_DIR}/display
     ${CMAKE_CURRENT_SOURCE_DIR}/input
     ${CMAKE_CURRENT_SOURCE_DIR}/utils
     ${CMAKE_CURRENT_SOURCE_DIR}/diagnostics
+    "${E2FS_PREFIX}/include"
 )
 
 find_library(log-lib     log)
 find_library(android-lib android)
 find_library(jnigraphics-lib jnigraphics)
+find_library(z-lib z)
 
 target_link_libraries(vine_runtime
+    e2fs_ext2fs
+    e2fs_com_err
+    e2fs_uuid
+    e2fs_blkid
+    ${z-lib}
     ${log-lib}
     ${android-lib}
     ${jnigraphics-lib}
