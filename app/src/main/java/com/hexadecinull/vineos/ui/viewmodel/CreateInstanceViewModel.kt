@@ -12,6 +12,9 @@ import com.hexadecinull.vineos.native.VineRuntime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import java.util.UUID
+import java.util.zip.ZipFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -86,9 +89,10 @@ class CreateInstanceViewModel @Inject constructor(
             val isRooted = allowRootInstances.value && selectedRoot.value
 
             val requestedInstanceId = UUID.randomUUID().toString()
+            val vromPath = selectedRom.localPath ?: ""
             val instancePath = VineRuntime.createInstance(
                 instanceId = requestedInstanceId,
-                romImagePath = selectedRom.localPath ?: "",
+                romImagePath = vromPath,
                 storageMb = storage,
             )
 
@@ -100,6 +104,41 @@ class CreateInstanceViewModel @Inject constructor(
             }
 
             val instanceId = File(instancePath).name
+
+            // Rootless bring-up: system.img is a complete ext4 Android rootfs.
+            // Extract it into private instance storage for userspace libext2fs.
+            if (vromPath.endsWith(".vrom", ignoreCase = true)) {
+                val preparedImage = File(instancePath, "system.img")
+                val preparation = withContext(Dispatchers.IO) {
+                    runCatching {
+                        ZipFile(vromPath).use { zip ->
+                            val entry = zip.getEntry("system.img")
+                                ?: error("VROM does not contain system.img")
+                            if (preparedImage.exists() && !preparedImage.delete()) {
+                                error("Could not replace existing system.img")
+                            }
+                            zip.getInputStream(entry).buffered().use { input ->
+                                preparedImage.outputStream().buffered().use { output ->
+                                    input.copyTo(output, 1024 * 1024)
+                                }
+                            }
+                            if (entry.size >= 0 && preparedImage.length() != entry.size) {
+                                error("system.img extraction incomplete")
+                            }
+                        }
+                    }
+                }
+                if (preparation.isFailure) {
+                    preparedImage.delete()
+                    stateFlow.value = CreateInstanceState.Error(
+                        "Failed to prepare VROM system.img: " +
+                            (preparation.exceptionOrNull()?.message ?: "unknown error"),
+                    )
+                    return@launch
+                }
+                VineRuntime.probeExt4Rootfs(preparedImage.absolutePath)
+            }
+
             val instance = VMInstance(
                 id = instanceId,
                 name = name,
