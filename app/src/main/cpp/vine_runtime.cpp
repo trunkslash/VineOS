@@ -91,6 +91,17 @@ Java_com_hexadecinull_vineos_native_VineRuntime_createInstance(
     return s2j(env, path);
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_hexadecinull_vineos_native_VineRuntime_probeExt4Rootfs(
+        JNIEnv* env, jobject, jstring j_image_path) {
+    const std::string image_path = j2s(env, j_image_path);
+    if (image_path.empty()) {
+        VINE_LOGE("libext2fs: empty image path");
+        return JNI_FALSE;
+    }
+    return vine::rootfs::probe_ext4_rootfs(image_path) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_hexadecinull_vineos_native_VineRuntime_startInstance(
         JNIEnv* env, jobject,
