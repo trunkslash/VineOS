@@ -112,7 +112,7 @@ bool extract_inode(ExtractContext* ctx, ext2_ino_t ino,
                    const struct ext2_inode& inode,
                    const std::string& path);
 
-int extract_dirent(struct ext2_dir_entry* dirent, int, int, char*, void* private_data) {
+int extract_dirent(ext2_ino_t, int, struct ext2_dir_entry* dirent, int, int, char*, void* private_data) {
     auto* ctx = static_cast<ExtractContext*>(private_data);
     if (ctx->failed || dirent->inode == 0) return 0;
 
