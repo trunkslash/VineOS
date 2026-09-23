@@ -32,7 +32,7 @@ Container::~Container() {
 Container::Container(Container&& o) noexcept
     : config_(std::move(o.config_)), status_(o.status_),
       init_pid_(o.init_pid_), framebuffer_fd_(o.framebuffer_fd_),
-      cgroup_paths_(std::move(o.cgroup_paths_)) {
+      rootless_directory_(o.rootless_directory_), cgroup_paths_(std::move(o.cgroup_paths_)) {
     o.status_ = ContainerStatus::STOPPED;
     o.init_pid_ = -1;
     o.framebuffer_fd_ = -1;
@@ -44,6 +44,7 @@ Container& Container::operator=(Container&& o) noexcept {
         status_ = o.status_;
         init_pid_ = o.init_pid_;
         framebuffer_fd_ = o.framebuffer_fd_;
+        rootless_directory_ = o.rootless_directory_;
         cgroup_paths_ = std::move(o.cgroup_paths_);
         o.status_ = ContainerStatus::STOPPED;
         o.init_pid_ = -1;
@@ -61,12 +62,19 @@ bool Container::start() {
         status_ = ContainerStatus::ERROR;
         return false;
     }
-    if (!mount_rootfs()) { status_ = ContainerStatus::ERROR; return false; }
-    if (!setup_bind_mounts()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
-    if (!setup_dev_nodes()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
+    // A prepared directory rootfs avoids /dev/loop-control entirely. This is the
+    // rootless backend; the legacy image/loop path remains available for rooted hosts.
+    rootless_directory_ = path_exists(config_.rootfs_mount_path + "/init");
+    if (rootless_directory_) {
+        VINE_LOGI("Using rootless directory rootfs: %s", config_.rootfs_mount_path.c_str());
+    } else {
+        if (!mount_rootfs()) { status_ = ContainerStatus::ERROR; return false; }
+        if (!setup_bind_mounts()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
+        if (!setup_dev_nodes()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
 
-    if (config_.needs_qemu_32bit && !setup_binfmt_misc()) {
-        VINE_LOGW("binfmt_misc setup failed, 32-bit apps will not work");
+        if (config_.needs_qemu_32bit && !setup_binfmt_misc()) {
+            VINE_LOGW("binfmt_misc setup failed, 32-bit apps will not work");
+        }
     }
 
     if (!launch_init()) { teardown_mounts(); status_ = ContainerStatus::ERROR; return false; }
@@ -100,6 +108,36 @@ void Container::kill_now() {
     teardown_cgroups();
     teardown_mounts();
     status_ = ContainerStatus::STOPPED;
+}
+
+bool Container::setup_rootless_userns() {
+    const uid_t uid = getuid();
+    const gid_t gid = getgid();
+
+    if (unshare(CLONE_NEWUSER) != 0) {
+        VINE_LOGE_ERRNO("unshare(CLONE_NEWUSER)");
+        return false;
+    }
+
+    // setgroups must be disabled before writing gid_map on unprivileged userns.
+    int sg = open("/proc/self/setgroups", O_WRONLY | O_CLOEXEC);
+    if (sg >= 0) {
+        const char deny[] = "deny";
+        (void)write(sg, deny, sizeof(deny) - 1);
+        close(sg);
+    }
+
+    if (!write_file("/proc/self/uid_map", "0 " + std::to_string(uid) + " 1\n")) {
+        VINE_LOGE("Failed to write uid_map for rootless container");
+        return false;
+    }
+    if (!write_file("/proc/self/gid_map", "0 " + std::to_string(gid) + " 1\n")) {
+        VINE_LOGE("Failed to write gid_map for rootless container");
+        return false;
+    }
+
+    VINE_LOGI("Rootless user namespace mapped uid=%d gid=%d", (int)uid, (int)gid);
+    return true;
 }
 
 bool Container::mount_rootfs() {
@@ -268,8 +306,22 @@ bool Container::launch_init() {
         struct rlimit rl{20, 20};
         setrlimit(RLIMIT_NICE, &rl);
 
+        if (rootless_directory_ && !setup_rootless_userns()) {
+            _exit(1);
+        }
+
         int ns_flags = CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC;
-        if (unshare(ns_flags) != 0) { VINE_LOGE_ERRNO("unshare"); _exit(1); }
+        if (unshare(ns_flags) != 0) { VINE_LOGE_ERRNO("unshare(container namespaces)"); _exit(1); }
+
+        // Mounts made by the rootless path must happen after entering the user
+        // and mount namespaces so they never touch the host mount namespace.
+        if (rootless_directory_) {
+            if (!setup_bind_mounts()) _exit(1);
+            if (!setup_dev_nodes()) _exit(1);
+            if (config_.needs_qemu_32bit && !setup_binfmt_misc()) {
+                VINE_LOGW("rootless binfmt_misc unavailable; 32-bit apps will not work");
+            }
+        }
 
         const std::string hostname = "vine-" + config_.instance_id.substr(0, 8);
         sethostname(hostname.c_str(), hostname.size());
@@ -397,6 +449,7 @@ std::string Container::diagnostics() const {
     out += "Status   : " + std::to_string((int)status_) + "\n";
     out += "Init PID : " + std::to_string(init_pid_) + "\n";
     out += "QEMU     : " + std::string(config_.needs_qemu_32bit ? "yes" : "no") + "\n";
+    out += "Rootfs   : " + std::string(rootless_directory_ ? "directory (rootless)" : "loop image") + "\n";
     out += "RAM cap  : " + std::string(config_.ram_mb > 0 ? std::to_string(config_.ram_mb) + " MB" : "unlimited") + "\n";
     out += "CPU cap  : " + std::string(config_.cpu_cores > 0 ? std::to_string(config_.cpu_cores) + " cores" : "unlimited") + "\n";
     out += "Cgroups  : " + std::to_string(cgroup_paths_.size()) + " applied\n";
